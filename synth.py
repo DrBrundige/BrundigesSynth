@@ -28,6 +28,7 @@ class BrundigesSynth:
 		for i in self.combined_wave:
 			frames = struct.pack('h', i)
 			w.writeframesraw(frames)
+		print("Success! Wrote file " + filename)
 		w.close()
 
 	# Combines two or more waves into a single wave
@@ -52,9 +53,11 @@ class BrundigesSynth:
 		for oscillator in self.all_oscillators:
 			oscillator.play()
 
-	def plot_all_oscillators(self, plot_combined_wave=False):
-		for oscillator in self.all_oscillators:
-			plt.plot(oscillator.wave)
+	def plot_oscillators(self, plot_oscillator_waves=True, plot_combined_wave=False):
+		if plot_oscillator_waves:
+			for oscillator in self.all_oscillators:
+				plt.plot(oscillator.wave)
+
 		if plot_combined_wave:
 			plt.plot(self.combined_wave)
 		plt.show()
@@ -64,6 +67,7 @@ class Oscillator:
 	Synth = BrundigesSynth()
 	all_filters = []
 	i = 0
+	j = 0
 	wave = []
 	num_samples = 0
 
@@ -90,14 +94,15 @@ class Beeper(Oscillator):
 	Synth = BrundigesSynth()
 	duration = 0
 	amplitude = 0.0
-	i = 0
 	# Frequency of wave this beeper will produce
 	frequency = 0
 	# Phase of wave. 0.5 is reversed
 	phase = 0
+	period = (2 * math.pi)
 
-	def __init__(self, synth, duration, frequency, amplitude=1.0, phase=1.0):
+	def __init__(self, synth, duration, frequency, amplitude=1.0, phase=0.0):
 		self.i = 0
+		self.j = 0
 		self.Synth = synth
 		self.frequency = frequency
 		# Number of samples produced. Obtained by multiplying sample rate by duration in seconds
@@ -105,15 +110,22 @@ class Beeper(Oscillator):
 		# Volume of note
 		self.amplitude = (amplitude * self.Synth.bit_depth) / 2
 		self.phase = int(self.frequency * phase / 2)
+		self.period = (2 * math.pi * self.frequency) / self.Synth.sample_rate
 		self.wave = []
 		self.all_filters = []
 
 	def __next__(self):
 		# print(self.i < self.end)
 		if self.i < self.num_samples:
-			r = self.i * (2 * math.pi * self.frequency) / self.Synth.sample_rate
-			r += self.phase
+			r = self.j * self.period
 			self.i += 1
+			if r >= math.pi * 2:
+				r = 0.0
+				self.j = 1
+			else:
+				self.j += 1
+
+			# r += self.phase
 			sample = int(math.sin(r) * self.amplitude)
 			for filter in self.all_filters:
 				sample = filter.filter(sample)
@@ -128,36 +140,75 @@ class Beeper(Oscillator):
 			self.wave.append(sample)
 
 
-class HarmonicBeeper(Oscillator):
+class SawtoothBuzzer(Beeper):
 	# Synthesizer environment. Standardizes sample rate and bit depth
-	Synth = BrundigesSynth()
-	duration = 0
-	amplitude = 0.0
-	i = 0
-	# Frequency of wave this beeper will produce
-	frequency = 0
-	# Phase of wave. 0.5 is reversed
-	phase = 0
+
+	def __init__(self, synth, duration, frequency, amplitude=1.0, phase=0.0):
+
+		super().__init__(synth, duration, frequency / 2, amplitude=1.0, phase=0.0)
+
+	def __next__(self):
+		# print(self.i < self.end)
+		if self.i < self.num_samples:
+			r = self.j * self.period
+			self.i += 1
+			if r > math.pi:
+				r = 0.0
+				self.j = 1
+			else:
+				self.j += 1
+			r += self.phase
+			sample = int(math.sin(r) * self.amplitude)
+			for filter in self.all_filters:
+				sample = filter.filter(sample)
+			# Clip - if r is greater than bit depth, return bit depth
+			# print(math.sin(r) + 1)
+			return sample
+		else:
+			raise StopIteration
+
+
+class TriangleBuzzer(Beeper):
+	k = 1
+
+	def __next__(self):
+		if self.i < self.num_samples:
+			self.i += 1
+			r = self.j * self.period
+			if r > math.pi:
+				r = 0
+				self.j = 1
+				self.k = self.k * -1
+			else:
+				self.j += 1
+
+			# r += self.phase
+			# r -=  / 2
+			sample = int((1 - (2 * r / math.pi)) * self.k * self.amplitude)
+
+			for filter in self.all_filters:
+				sample = filter.filter(sample)
+
+			return sample
+		else:
+			raise StopIteration
+
+
+class HarmonicBeeper(Beeper):
+	# Synthesizer environment. Standardizes sample rate and bit depth
+
 	harmonics = 3
 
-	def __init__(self, synth, duration, frequency, harmonics=3, amplitude=1.0, phase=1.0):
-		self.i = 0
-		self.Synth = synth
-		self.frequency = frequency
+	def __init__(self, synth, duration, frequency, harmonics=3, amplitude=1.0, phase=0.0):
+		super().__init__(synth, duration, frequency, amplitude, phase)
 		self.harmonics = harmonics
 		assert harmonics > 0, "ERROR! Harmonics must be 1 or greater!"
-		# Number of samples produced. Obtained by multiplying sample rate by duration in seconds
-		self.num_samples = duration * self.Synth.sample_rate
-		# Volume of note
-		self.amplitude = (amplitude * self.Synth.bit_depth) / 2
-		self.phase = int(self.frequency * phase / 2)
-		self.wave = []
-		self.all_filters = []
 
 	def __next__(self):
 		# print(self.i < self.end)
 		if self.i < self.num_samples:
 			sample = 0
+
 			for h in range(self.harmonics):
 				r = self.i * (2 * math.pi * self.frequency / (h + 1)) / self.Synth.sample_rate
 				r += self.phase
@@ -173,10 +224,6 @@ class HarmonicBeeper(Oscillator):
 			return sample
 		else:
 			raise StopIteration
-
-	def play(self):
-		for sample in self:
-			self.wave.append(sample)
 
 
 class NoiseMaker(Oscillator):
@@ -241,15 +288,21 @@ class Square(Filter):
 
 
 if __name__ == '__main__':
+	print("Brundige's Synth!")
 	brundiges_synth = BrundigesSynth()
 
-	nice_beeper_c = HarmonicBeeper(brundiges_synth, 2, 261.62, harmonics=2)
-	nice_beeper_e = HarmonicBeeper(brundiges_synth, 2, 329.62, harmonics=2)
-	nice_beeper_g = HarmonicBeeper(brundiges_synth, 2, 392.00, harmonics=2)
+	# nice_saw = Buzzer(brundiges_synth, 3, 55, phase=.25, amplitude=.25)
+	nice_beeper_c = SawtoothBuzzer(brundiges_synth, 4, 261.62)
+	nice_beeper_e = SawtoothBuzzer(brundiges_synth, 4, 329.62)
+	nice_beeper_g = SawtoothBuzzer(brundiges_synth, 4, 392.00)
 
 	# nice_square = Square(nice_beeper_c)
 	# nice_beeper_c.all_filters.append(nice_square)
 
+	# brundiges_synth.all_oscillators.append(nice_saw)
+	# brundiges_synth.all_oscillators.append(nice_beeper)
+	# brundiges_synth.all_oscillators.append(nice_beeper_b)
+	# nice_beeper.amplitude = 1000
 	brundiges_synth.all_oscillators.append(nice_beeper_c)
 	brundiges_synth.all_oscillators.append(nice_beeper_e)
 	brundiges_synth.all_oscillators.append(nice_beeper_g)
@@ -258,5 +311,6 @@ if __name__ == '__main__':
 	brundiges_synth.play_all_oscillators()
 	brundiges_synth.combine_waves(average_waves)
 
-	# brundiges_synth.plot_all_oscillators(True)
+	# brundiges_synth.plot_oscillators(plot_oscillator_waves=False, plot_combined_wave=True)
 	brundiges_synth.export_combined_wave()
+	print("Complete!")
