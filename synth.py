@@ -392,17 +392,22 @@ if __name__ == '__main__':
 	print("Brundige's Synth!")
 	brundiges_synth = BrundigesSynth()
 
-	# brundiges_synth.all_oscillators.append(HarmonicBeeper(brundiges_synth, 4, 440, harmonics=2, phase=.12, amplitude=.5))
-	brundiges_synth.all_oscillators.append(Clicker(brundiges_synth, 4, 120, frequency=110, click_waves=4))
+	brundiges_synth.all_oscillators.append(SawtoothBuzzer(brundiges_synth, 4, 220, phase=.12, amplitude=.5))
+	brundiges_synth.all_oscillators.append(Clicker(brundiges_synth, 4, 480, frequency=880, click_waves=4, amplitude=.60))
+	brundiges_synth.all_oscillators.append(Clicker(brundiges_synth, 4, 120, frequency=110, click_waves=6))
 	# desampler = LofiDesampler(4)
 	# modulus = LofiModulus(100)
 	# brundiges_synth.all_oscillators[0].all_filters.append(desampler)
 	# brundiges_synth.all_oscillators[0].all_filters.append(modulus)
 	# brundiges_synth.all_oscillators.append(InvertedBeeper(brundiges_synth, 3, 55))
 
+	start = datetime.now()
 	brundiges_synth.play_all_oscillators()
+	end = datetime.now()
+	print(end.timestamp() - start.timestamp())
+
 	brundiges_synth.combine_waves(average_waves)
 
 	brundiges_synth.plot_oscillators(plot_oscillator_waves=False, plot_combined_wave=True)
-	brundiges_synth.export_combined_wave()
+	# brundiges_synth.export_combined_wave()
 	print("Complete!")

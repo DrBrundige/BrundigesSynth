@@ -118,3 +118,4 @@ dmypy.json
 .pyre/
 .idea/vcs.xml
 .idea/vcs.xml
+*.zip
